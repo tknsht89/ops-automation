@@ -1,5 +1,0 @@
-# Do not commit actual transcripts, screenshots, or private output.
-Logs/
-logs/
-*.log
-private-output/
