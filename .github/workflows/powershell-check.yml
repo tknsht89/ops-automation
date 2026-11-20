@@ -1,0 +1,42 @@
+name: PowerShell check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse all scripts (syntax check)
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              $errors | ForEach-Object { Write-Host "::error file=$($_.Extent.File),line=$($_.Extent.StartLineNumber)::$($_.Message)" }
+            } else {
+              Write-Host "OK: $($_.FullName)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Run PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse
+          $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+          $errorsFound = @($results | Where-Object { $_.Severity -eq 'Error' })
+          if ($errorsFound.Count -gt 0) { exit 1 }
